@@ -1,0 +1,53 @@
+name: iOS simulator template (arm64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      godot_ref:
+        description: Godot tag or commit to build
+        default: 4.7.2-stable
+      build_release:
+        description: Also build template_release
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 240
+    steps:
+      - name: Check out Godot
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ inputs.godot_ref }}
+          path: godot
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tools
+        run: |
+          pip install scons
+          xcodebuild -version
+          sysctl -n machdep.cpu.brand_string hw.ncpu
+
+      - name: Build template_debug (arm64 simulator)
+        working-directory: godot
+        run: scons platform=ios target=template_debug arch=arm64 simulator=yes -j"$(sysctl -n hw.ncpu)"
+
+      - name: Build template_release (arm64 simulator)
+        if: ${{ inputs.build_release }}
+        working-directory: godot
+        run: scons platform=ios target=template_release arch=arm64 simulator=yes -j"$(sysctl -n hw.ncpu)"
+
+      - name: Check architectures
+        working-directory: godot/bin
+        run: for f in *.a; do echo "$f: $(lipo -archs "$f")"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-${{ inputs.godot_ref }}-ios-arm64-simulator
+          path: godot/bin/*.a
+          retention-days: 30

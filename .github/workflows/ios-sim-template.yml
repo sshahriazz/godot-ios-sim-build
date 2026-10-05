@@ -10,6 +10,10 @@ on:
         description: Also build template_release
         type: boolean
         default: false
+      metal:
+        description: Keep the Metal driver on in the simulator build (GPU rendering instead of software OpenGL)
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -33,6 +37,19 @@ jobs:
           xcodebuild -version
           sysctl -n machdep.cpu.brand_string hw.ncpu
 
+      - name: Keep Metal on for the simulator
+        if: ${{ inputs.metal }}
+        working-directory: godot
+        run: |
+          python3 - <<'PY'
+          path = "platform/ios/detect.py"
+          text = open(path).read()
+          old = 'print_warning("iOS Simulator does not support the Metal rendering driver")\n        env["metal"] = False'
+          assert old in text, "detect.py changed; update the patch"
+          open(path, "w").write(text.replace(old, 'pass  # Metal kept on for the Apple Silicon simulator'))
+          PY
+          git diff --stat
+
       - name: Build template_debug (arm64 simulator)
         working-directory: godot
         run: scons platform=ios target=template_debug arch=arm64 simulator=yes -j"$(sysctl -n hw.ncpu)"
@@ -49,6 +66,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: godot-${{ inputs.godot_ref }}-ios-arm64-simulator
+          name: godot-${{ inputs.godot_ref }}-ios-arm64-simulator${{ inputs.metal && '-metal' || '' }}
           path: godot/bin/*.a
           retention-days: 30
